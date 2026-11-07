@@ -31,7 +31,7 @@ import com.lucianmarin.news.ui.theme.Route159FontFamily
  * - `.small` metadata line: clickable `site` + `age ago` + `score°` in `#FF4500` (`orangered`)
  * - Bold `14.sp` clickable headline with visited state (`--darkgray`)
  * - Regular `14.sp` truncated summary (`--darkgray`, up to 480 chars)
- * - `1.dp` `--gainsboro` bottom divider
+ * - `1.dp` `--gainsboro` divider between stories (no top divider on the first story, no bottom divider on the last story)
  */
 @Composable
 fun NewsRowView(
@@ -40,6 +40,7 @@ fun NewsRowView(
     isVisited: Boolean,
     onSelectSite: (String) -> Unit,
     onOpenArticle: (NewsEntry) -> Unit,
+    showBottomDivider: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val rowBg = NewsTheme.rowBackground(forZeroBasedIndex = rowIndex)
@@ -137,9 +138,16 @@ fun NewsRowView(
             }
         }
 
-        NewsDivider()
+        if (showBottomDivider) {
+            NewsDivider()
+        }
     }
 }
 
 fun isOddNewsRow(zeroBasedIndex: Int): Boolean =
     NewsStateController.isOddRowHighlighted(zeroBasedIndex)
+
+fun shouldShowTopDivider(zeroBasedIndex: Int): Boolean = false
+
+fun shouldShowBottomDivider(zeroBasedIndex: Int, totalCount: Int): Boolean =
+    zeroBasedIndex in 0 until (totalCount - 1)

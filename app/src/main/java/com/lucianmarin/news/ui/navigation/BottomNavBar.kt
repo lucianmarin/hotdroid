@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.sp
 import com.lucianmarin.news.model.FeedTab
 import com.lucianmarin.news.model.NewsFormatter
 import com.lucianmarin.news.state.AppUiState
-import com.lucianmarin.news.ui.theme.LocalNewsPalette
 import com.lucianmarin.news.ui.theme.NewsTheme
 import com.lucianmarin.news.ui.theme.Route159FontFamily
 
@@ -45,15 +44,13 @@ fun BottomNavBar(
     onClearSite: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isDark = LocalNewsPalette.current.isDark
-    val barBg = if (isDark) NewsTheme.floatingBarBackground else NewsTheme.background
     val activeSite = uiState.selectedSite?.takeIf { it.isNotBlank() }
 
     Row(
         modifier = modifier
             .shadow(elevation = 4.dp, shape = RoundedCornerShape(10.dp))
             .clip(RoundedCornerShape(10.dp))
-            .background(barBg)
+            .background(NewsTheme.floatingBarBackground)
             .padding(horizontal = 6.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically

@@ -85,7 +85,7 @@ val DarkNewsPalette = NewsPalette(
     background = Color(0xFF000000),
     oddRowBackground = Color(0xFF141414),
     evenRowBackground = Color(0xFF000000),
-    floatingBarBackground = Color(0xFF181818),
+    floatingBarBackground = Color(0xFF242424),
     gainsboro = Color(0xFF242424),
     silver = Color(0xFF404040),
     gray = Color(0xFF808080),
@@ -171,6 +171,15 @@ object NewsTheme {
     @ReadOnlyComposable
     fun rowBackground(forZeroBasedIndex: Int): Color =
         if (NewsStateController.isOddRowHighlighted(forZeroBasedIndex)) {
+            oddRowBackground
+        } else {
+            evenRowBackground
+        }
+
+    @Composable
+    @ReadOnlyComposable
+    fun lastRowBackground(entryCount: Int): Color =
+        if (NewsStateController.isLastRowOddHighlighted(entryCount)) {
             oddRowBackground
         } else {
             evenRowBackground

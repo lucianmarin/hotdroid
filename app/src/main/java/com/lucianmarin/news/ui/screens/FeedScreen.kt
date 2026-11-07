@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -43,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lucianmarin.news.model.NewsEntry
 import com.lucianmarin.news.state.AppStateViewModel
-import com.lucianmarin.news.ui.theme.NewsDivider
 import com.lucianmarin.news.ui.theme.NewsTheme
 import com.lucianmarin.news.ui.theme.Route159FontFamily
 import kotlinx.coroutines.delay
@@ -94,7 +94,7 @@ fun FeedScreen(
         state = pullState,
         modifier = modifier
             .fillMaxSize()
-            .background(NewsTheme.background),
+            .background(NewsTheme.lastRowBackground(entryCount = uiState.entries.size)),
         indicator = {
             PullToRefreshDefaults.Indicator(
                 state = pullState,
@@ -187,15 +187,21 @@ fun FeedScreen(
                         onOpenArticle = { clickedEntry ->
                             viewModel.recordArticleOpened(clickedEntry)
                             openArticleUrl(context, clickedEntry)
-                        }
+                        },
+                        showBottomDivider = shouldShowBottomDivider(
+                            zeroBasedIndex = index,
+                            totalCount = uiState.entries.size
+                        )
                     )
                 }
 
                 if (uiState.isLoadingMore) {
                     item(key = "loading_more") {
+                        val lastRowBg = NewsTheme.lastRowBackground(entryCount = uiState.entries.size)
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .background(lastRowBg)
                                 .padding(vertical = 14.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -220,6 +226,7 @@ fun FeedScreen(
                     }
                 } else if (uiState.canLoadMore) {
                     item(key = "load_more") {
+                        val lastRowBg = NewsTheme.lastRowBackground(entryCount = uiState.entries.size)
                         LaunchedEffect(uiState.currentPage, uiState.entries.size) {
                             if (!uiState.loadMoreError) {
                                 viewModel.loadFeed(reset = false)
@@ -229,6 +236,7 @@ fun FeedScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .background(lastRowBg)
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
@@ -254,7 +262,14 @@ fun FeedScreen(
             }
 
             item(key = "bottom_floating_bar_spacer") {
-                Spacer(modifier = Modifier.height(72.dp))
+                val lastRowBg = NewsTheme.lastRowBackground(entryCount = uiState.entries.size)
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(lastRowBg)
+                        .navigationBarsPadding()
+                        .height(72.dp)
+                )
             }
         }
     }
@@ -285,7 +300,6 @@ private fun FeedStatusRow(
                 content()
             }
         }
-        NewsDivider()
     }
 }
 

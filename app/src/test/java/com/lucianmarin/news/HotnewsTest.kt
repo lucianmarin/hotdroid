@@ -8,6 +8,8 @@ import com.lucianmarin.news.network.APIClient
 import com.lucianmarin.news.state.InMemoryNewsPreferencesStore
 import com.lucianmarin.news.state.NewsStateController
 import com.lucianmarin.news.ui.screens.isOddNewsRow
+import com.lucianmarin.news.ui.screens.shouldShowBottomDivider
+import com.lucianmarin.news.ui.screens.shouldShowTopDivider
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -77,6 +79,23 @@ class HotnewsTest {
 
         assertTrue(isOddNewsRow(0))
         assertFalse(isOddNewsRow(1))
+
+        assertTrue(NewsStateController.isLastRowOddHighlighted(0))
+        assertTrue(NewsStateController.isLastRowOddHighlighted(1))
+        assertFalse(NewsStateController.isLastRowOddHighlighted(2))
+        assertTrue(NewsStateController.isLastRowOddHighlighted(3))
+        assertFalse(NewsStateController.isLastRowOddHighlighted(10))
+    }
+
+    @Test
+    fun `first news story has no top divider and last news story has no bottom divider`() {
+        assertFalse(shouldShowTopDivider(0))
+        assertFalse(shouldShowTopDivider(1))
+
+        assertTrue(shouldShowBottomDivider(zeroBasedIndex = 0, totalCount = 3))
+        assertTrue(shouldShowBottomDivider(zeroBasedIndex = 1, totalCount = 3))
+        assertFalse(shouldShowBottomDivider(zeroBasedIndex = 2, totalCount = 3))
+        assertFalse(shouldShowBottomDivider(zeroBasedIndex = 0, totalCount = 1))
     }
 
     @Test

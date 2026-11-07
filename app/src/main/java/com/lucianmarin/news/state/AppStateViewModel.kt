@@ -62,6 +62,15 @@ class NewsStateController(
             val oneBasedRowNumber = zeroBasedIndex + 1
             return oneBasedRowNumber % 2 == 1
         }
+
+        /**
+         * Returns whether the space after the last item in the list should use `oddRowBackground`
+         * (`true`) or `evenRowBackground` (`false`), matching the last row's background.
+         */
+        fun isLastRowOddHighlighted(entryCount: Int): Boolean {
+            if (entryCount <= 0) return true
+            return isOddRowHighlighted(entryCount - 1)
+        }
     }
 
     private val _uiState = MutableStateFlow(

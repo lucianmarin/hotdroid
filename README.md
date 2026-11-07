@@ -23,7 +23,7 @@ Native Android client for [Hotnews](https://news.lucianmarin.com) (`news.lucianm
   - [x] Floating text-only bottom navigation bar (`BottomNavBar`) styled after `../subdroid`:
     - Displays **Hottest**, **Coldest**, and **Newest** sections.
     - When a site/domain is selected, displays the selected `<site>` option alongside a separate multiply sign (`×`) option/icon in the nav bar for closing the filter and returning to the **Hottest** section (also supported via Android system back).
-  - [x] Alternating odd/even row highlighting (`#F0F0F0` Light / `#141414` Dark on odd rows; `#FFFFFF` Light / `#000000` Dark on even rows) with `1.dp` `--gainsboro` dividers and a centered `520.dp` reading column (`560.dp` max width with `20.dp` horizontal padding).
+  - [x] Alternating odd/even row highlighting (`#F0F0F0` Light / `#141414` Dark on odd rows; `#FFFFFF` Light / `#000000` Dark on even rows) with `1.dp` `--gainsboro` dividers between stories (no divider above the first story or below the last story) and a centered `520.dp` reading column (`560.dp` max width with `20.dp` horizontal padding).
   - [x] Article rows matching `news.lucianmarin.com` and `../macnews` (`site` + `age ago` + `score°` in `#FF4500`, bold clickable headline with visited state, 480-char `--darkgray` summary).
   - [x] Pull-to-refresh (`PullToRefreshBox`) and automatic infinite scroll (`LazyColumn` loading `?p=2`, `?p=3`, ...).
 - [x] **Automated Unit Tests & Build Verification**:
