@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lucianmarin.news.model.FeedTab
 import com.lucianmarin.news.model.NewsEntry
+import com.lucianmarin.news.model.PaginatedNewsResponse
 import com.lucianmarin.news.network.APIClient
 import com.lucianmarin.news.ui.theme.ThemeMode
 import kotlinx.coroutines.CancellationException
@@ -24,6 +25,7 @@ data class AppUiState(
     val entries: List<NewsEntry> = emptyList(),
     val currentPage: Int = 1,
     val totalPages: Int = 1,
+    val isShowingCachedContent: Boolean = false,
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
     val loadMoreError: Boolean = false,
@@ -42,7 +44,7 @@ data class AppUiState(
 
     val activeFeedPath: String
         get() = if (!selectedSite.isNullOrBlank()) {
-            "/api/$selectedSite"
+            APIClient.siteEndpointPath(selectedSite)
         } else {
             selectedTab.apiPath
         }
@@ -71,32 +73,107 @@ class NewsStateController(
             if (entryCount <= 0) return true
             return isOddRowHighlighted(entryCount - 1)
         }
+
+        fun endpointPathForSelection(selectedTab: FeedTab, selectedSite: String?): String =
+            if (!selectedSite.isNullOrBlank()) {
+                APIClient.siteEndpointPath(selectedSite)
+            } else {
+                selectedTab.apiPath
+            }
+
+        fun resolveTotalPages(response: PaginatedNewsResponse): Int =
+            max(
+                response.resolvedPages,
+                if (response.entries.isEmpty()) 0 else response.page
+            )
     }
 
-    private val _uiState = MutableStateFlow(
-        AppUiState(
-            selectedTab = storage.getSelectedTab(),
-            visitedUrls = storage.getVisitedUrls(),
-            visitedSites = storage.getVisitedSites(),
-            apiBaseUrl = storage.getApiBaseUrl().also { apiClient.updateBaseUrl(it) },
-            themeMode = storage.getThemeMode()
+    private val _uiState: MutableStateFlow<AppUiState> = run {
+        apiClient.attachCacheStore(storage)
+        val initialTab = storage.getSelectedTab()
+        val initialCache = getCachedResponseForSelection(selectedTab = initialTab, selectedSite = null)
+        MutableStateFlow(
+            AppUiState(
+                selectedTab = initialTab,
+                entries = initialCache?.entries ?: emptyList(),
+                currentPage = initialCache?.page ?: 1,
+                totalPages = initialCache?.let { resolveTotalPages(it) } ?: 1,
+                isShowingCachedContent = initialCache != null,
+                visitedUrls = storage.getVisitedUrls(),
+                visitedSites = storage.getVisitedSites(),
+                apiBaseUrl = storage.getApiBaseUrl().also { apiClient.updateBaseUrl(it) },
+                themeMode = storage.getThemeMode()
+            )
         )
-    )
+    }
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
     private var activeLoadJob: Job? = null
 
+    fun getCachedResponseForEndpoint(endpoint: String, page: Int = 1): PaginatedNewsResponse? {
+        val key = APIClient.cacheKeyForEndpoint(endpoint, page) ?: return null
+        return apiClient.getCachedResponse(key, page = 1) ?: storage.getEndpointCache(key)
+    }
+
+    private fun getCachedResponseForSelection(
+        selectedTab: FeedTab,
+        selectedSite: String?
+    ): PaginatedNewsResponse? {
+        val endpoint = try {
+            endpointPathForSelection(selectedTab, selectedSite)
+        } catch (_: Exception) {
+            return null
+        }
+        return getCachedResponseForEndpoint(endpoint, page = 1)
+    }
+
+    private fun cacheFirstPageResponse(
+        selectedTab: FeedTab,
+        selectedSite: String?,
+        response: PaginatedNewsResponse
+    ) {
+        if (response.page != 1) return
+        val endpoint = try {
+            endpointPathForSelection(selectedTab, selectedSite)
+        } catch (_: Exception) {
+            return
+        }
+        apiClient.cacheResponse(path = endpoint, response = response, page = 1)
+        storage.setEndpointCache(endpoint = endpoint, response = response)
+    }
+
     fun selectTab(tab: FeedTab) {
         val current = _uiState.value
         val wasSameSelection = current.selectedTab == tab && current.selectedSite == null
+        val cached = getCachedResponseForSelection(selectedTab = tab, selectedSite = null)
         storage.setSelectedTab(tab)
-        _uiState.update {
-            it.copy(
+        _uiState.update { state ->
+            val nextEntries = when {
+                cached != null -> cached.entries
+                !wasSameSelection -> emptyList()
+                else -> state.entries
+            }
+            val nextCurrentPage = when {
+                cached != null -> cached.page
+                !wasSameSelection -> 1
+                else -> state.currentPage
+            }
+            val nextTotalPages = when {
+                cached != null -> resolveTotalPages(cached)
+                !wasSameSelection -> 1
+                else -> state.totalPages
+            }
+            state.copy(
                 selectedTab = tab,
                 selectedSite = null,
+                entries = nextEntries,
+                currentPage = nextCurrentPage,
+                totalPages = nextTotalPages,
+                isShowingCachedContent = cached != null,
                 isLoadingMore = false,
                 loadMoreError = false,
-                scrollResetVersion = it.scrollResetVersion + 1
+                errorMessage = null,
+                scrollResetVersion = state.scrollResetVersion + 1
             )
         }
         if (wasSameSelection || current.selectedTab != tab || current.selectedSite != null) {
@@ -107,13 +184,36 @@ class NewsStateController(
     fun selectSite(site: String) {
         val cleaned = site.trim()
         if (cleaned.isEmpty()) return
+        val current = _uiState.value
+        val wasSameSite = current.selectedSite == cleaned
+        val cached = getCachedResponseForSelection(selectedTab = current.selectedTab, selectedSite = cleaned)
         markSiteVisited(cleaned)
-        _uiState.update {
-            it.copy(
+        _uiState.update { state ->
+            val nextEntries = when {
+                cached != null -> cached.entries
+                !wasSameSite -> emptyList()
+                else -> state.entries
+            }
+            val nextCurrentPage = when {
+                cached != null -> cached.page
+                !wasSameSite -> 1
+                else -> state.currentPage
+            }
+            val nextTotalPages = when {
+                cached != null -> resolveTotalPages(cached)
+                !wasSameSite -> 1
+                else -> state.totalPages
+            }
+            state.copy(
                 selectedSite = cleaned,
+                entries = nextEntries,
+                currentPage = nextCurrentPage,
+                totalPages = nextTotalPages,
+                isShowingCachedContent = cached != null,
                 isLoadingMore = false,
                 loadMoreError = false,
-                scrollResetVersion = it.scrollResetVersion + 1
+                errorMessage = null,
+                scrollResetVersion = state.scrollResetVersion + 1
             )
         }
         triggerLoad(reset = true)
@@ -125,14 +225,20 @@ class NewsStateController(
     fun clearSiteFilter() {
         val current = _uiState.value
         if (current.selectedSite == null && current.selectedTab == FeedTab.HOT) return
+        val cached = getCachedResponseForSelection(selectedTab = FeedTab.HOT, selectedSite = null)
         storage.setSelectedTab(FeedTab.HOT)
-        _uiState.update {
-            it.copy(
+        _uiState.update { state ->
+            state.copy(
                 selectedTab = FeedTab.HOT,
                 selectedSite = null,
+                entries = cached?.entries ?: emptyList(),
+                currentPage = cached?.page ?: 1,
+                totalPages = cached?.let { resolveTotalPages(it) } ?: 1,
+                isShowingCachedContent = cached != null,
                 isLoadingMore = false,
                 loadMoreError = false,
-                scrollResetVersion = it.scrollResetVersion + 1
+                errorMessage = null,
+                scrollResetVersion = state.scrollResetVersion + 1
             )
         }
         triggerLoad(reset = true)
@@ -157,14 +263,31 @@ class NewsStateController(
 
     suspend fun loadFeed(reset: Boolean) {
         val snapshot = _uiState.value
+        val activeSite = snapshot.selectedSite
+        val activeTab = snapshot.selectedTab
+
         if (reset) {
-            _uiState.update {
-                it.copy(
-                    isLoading = true,
-                    isLoadingMore = false,
-                    loadMoreError = false,
-                    errorMessage = null
-                )
+            val cached = getCachedResponseForSelection(selectedTab = activeTab, selectedSite = activeSite)
+            _uiState.update { state ->
+                if (state.entries.isEmpty() && cached != null) {
+                    state.copy(
+                        entries = cached.entries,
+                        currentPage = cached.page,
+                        totalPages = resolveTotalPages(cached),
+                        isShowingCachedContent = true,
+                        isLoading = true,
+                        isLoadingMore = false,
+                        loadMoreError = false,
+                        errorMessage = null
+                    )
+                } else {
+                    state.copy(
+                        isLoading = true,
+                        isLoadingMore = false,
+                        loadMoreError = false,
+                        errorMessage = null
+                    )
+                }
             }
         } else {
             if (!snapshot.canLoadMore || snapshot.isLoading || snapshot.isLoadingMore) {
@@ -179,14 +302,20 @@ class NewsStateController(
         }
 
         val targetPage = if (reset) 1 else snapshot.currentPage + 1
-        val activeSite = _uiState.value.selectedSite
-        val activeTab = _uiState.value.selectedTab
 
         try {
             val response = if (!activeSite.isNullOrBlank()) {
                 apiClient.fetchSite(site = activeSite, page = targetPage)
             } else {
                 apiClient.fetchFeed(tab = activeTab, page = targetPage)
+            }
+
+            if (targetPage == 1 && response.page == 1) {
+                cacheFirstPageResponse(
+                    selectedTab = activeTab,
+                    selectedSite = activeSite,
+                    response = response
+                )
             }
 
             val latest = _uiState.value
@@ -202,16 +331,14 @@ class NewsStateController(
                 latest.entries + newUnique
             }
 
-            val resolvedTotalPages = max(
-                response.resolvedPages,
-                if (response.entries.isEmpty()) 0 else response.page
-            )
+            val resolvedTotalPages = resolveTotalPages(response)
 
             _uiState.update {
                 it.copy(
                     entries = mergedEntries,
                     currentPage = response.page,
                     totalPages = resolvedTotalPages,
+                    isShowingCachedContent = false,
                     isLoading = false,
                     isLoadingMore = false,
                     loadMoreError = false,
@@ -325,7 +452,10 @@ class NewsStateController(
 
 class AppStateViewModel(application: Application) : AndroidViewModel(application) {
     private val storage = SessionStorage(application)
-    val apiClient = APIClient(baseUrl = storage.getApiBaseUrl())
+    val apiClient = APIClient(
+        baseUrl = storage.getApiBaseUrl(),
+        cacheStore = storage
+    )
     val controller = NewsStateController(
         storage = storage,
         apiClient = apiClient,

@@ -17,8 +17,8 @@ Native Android client for [Hotnews](https://news.lucianmarin.com) (`news.lucianm
   - [x] Adaptive launcher icon (`ic_launcher.xml`, `ic_launcher_round.xml`, `ic_launcher_background.xml`, `ic_launcher_foreground.xml`) built from `../macnews/icon.svg`'s 5 warm vertical stripes (`#FBB03B`, `#F7931E`, `#F15A24`, `#ED1C24`, `#C1272D`).
 - [x] **Data & State Layer (`Models`, `APIClient`, `SessionStorage`, `AppStateViewModel`)**:
   - [x] `FeedTab` (`Hottest`, `Coldest`, `Newest`), `NewsEntry`, `PaginatedNewsResponse`, and `NewsFormatter` (`shortDate`, `truncateSummary` at 480 chars, `siteName`, `siteNavigationLabel`, and `siteNavigationOptions` with `×`).
-  - [x] Coroutine-based `APIClient` fetching `/api/hot`, `/api/cold`, `/api/new`, and `/api/{site}` from `https://news.lucianmarin.com`.
-  - [x] `NewsStateController` & `AppStateViewModel` managing active section (`Hottest`, `Coldest`, `Newest`), site/domain filter selection & closing back to `Hottest`, infinite scroll pagination, pull-to-refresh, and visited article/site persistence.
+  - [x] Coroutine-based `APIClient` fetching `/api/hot`, `/api/cold`, `/api/new`, and `/api/{site}` from `https://news.lucianmarin.com`, with per-endpoint first-page caching (`?p=1` normalized to the plain endpoint call without `p` parameters).
+  - [x] `NewsStateController` & `AppStateViewModel` managing active section (`Hottest`, `Coldest`, `Newest`), site/domain filter selection & closing back to `Hottest`, first-paint rendering from per-endpoint cache replaced in place when live endpoint content arrives, infinite scroll pagination, pull-to-refresh, and visited article/site persistence.
 - [x] **Jetpack Compose UI (`NewsTheme`, `MainScaffold`, `BottomNavBar`, `FeedScreen`, `NewsRowView`)**:
   - [x] Floating text-only bottom navigation bar (`BottomNavBar`) styled after `../subdroid`:
     - Displays **Hottest**, **Coldest**, and **Newest** sections.

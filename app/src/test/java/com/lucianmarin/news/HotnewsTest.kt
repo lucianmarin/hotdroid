@@ -228,4 +228,194 @@ class HotnewsTest {
         assertEquals("/api/hot", controller.uiState.value.activeFeedPath)
         assertEquals("hottest-all-1", controller.uiState.value.entries.first().id)
     }
+
+    @Test
+    fun `endpoint caching stores only first page per endpoint and treats p=1 equal to plain endpoint`() = runTest {
+        val storage = InMemoryNewsPreferencesStore()
+        var version = 1
+        val client = APIClient(
+            baseUrl = "https://news.lucianmarin.com",
+            cacheStore = storage,
+            transport = { url ->
+                val page = url.query
+                    ?.split("&")
+                    ?.firstOrNull { it.startsWith("p=") }
+                    ?.substringAfter("p=")
+                    ?.toIntOrNull()
+                    ?: 1
+                val path = url.path
+                val body = """
+                    {
+                        "page": $page,
+                        "pages": 3,
+                        "view": "hottest",
+                        "entries": [
+                            {
+                                "id": "$path-p$page-v$version",
+                                "url": "https://example.com$path/$page/$version",
+                                "title": "Entry $path p$page v$version",
+                                "domain": "example.com",
+                                "site": "example",
+                                "pub": 1793200000.0,
+                                "age": "1h",
+                                "description": "Summary",
+                                "score": 0.1
+                            }
+                        ]
+                    }
+                """.trimIndent()
+                200 to body
+            }
+        )
+
+        // ?p=1 URL is normalized to plain endpoint URL without p parameters
+        assertEquals(
+            "https://news.lucianmarin.com/api/hot",
+            client.buildUrl("/api/hot").toString()
+        )
+        assertEquals(
+            "https://news.lucianmarin.com/api/hot",
+            client.buildUrl("/api/hot?p=1").toString()
+        )
+        assertEquals(
+            "https://news.lucianmarin.com/api/hot?p=2",
+            client.buildUrl("/api/hot", page = 2).toString()
+        )
+
+        // Cache key normalization: ?p=1 equals plain endpoint; page > 1 returns null
+        assertEquals("/api/hot", APIClient.cacheKeyForEndpoint("/api/hot"))
+        assertEquals("/api/hot", APIClient.cacheKeyForEndpoint("/api/hot?p=1"))
+        assertEquals("/api/hot", APIClient.cacheKeyForEndpoint("https://news.lucianmarin.com/api/hot?p=1"))
+        assertNull(APIClient.cacheKeyForEndpoint("/api/hot?p=2"))
+        assertNull(APIClient.cacheKeyForEndpoint("/api/hot", page = 2))
+
+        // Fetch /api/hot?p=1 -> caches under /api/hot
+        client.fetchEntries("/api/hot?p=1")
+        val hotCache = storage.getEndpointCache("/api/hot")
+        val hotCacheViaP1 = storage.getEndpointCache("/api/hot?p=1")
+        assertEquals(hotCache, hotCacheViaP1)
+        assertEquals("/api/hot-p1-v1", hotCache?.entries?.first()?.id)
+
+        // Fetch page 2 -> must NOT overwrite page 1 cache or create a page 2 cache entry
+        version = 2
+        client.fetchFeed(FeedTab.HOT, page = 2)
+        assertNull(storage.getEndpointCache("/api/hot?p=2"))
+        assertNull(client.getCachedResponse("/api/hot", page = 2))
+        assertEquals("/api/hot-p1-v1", storage.getEndpointCache("/api/hot")?.entries?.first()?.id)
+
+        // Fetch other endpoints -> stored separately per API endpoint
+        client.fetchFeed(FeedTab.COLD, page = 1)
+        client.fetchSite("macrumors", page = 1)
+        assertEquals(
+            setOf("/api/hot", "/api/cold", "/api/macrumors"),
+            storage.getAllEndpointCaches().keys
+        )
+        assertEquals("/api/cold-p1-v2", storage.getEndpointCache("/api/cold")?.entries?.first()?.id)
+        assertEquals("/api/macrumors-p1-v2", storage.getEndpointCache("/api/macrumors")?.entries?.first()?.id)
+    }
+
+    @Test
+    fun `draws cached content on first paint and replaces in place when endpoint content is ready`() = runTest {
+        val cachedHotResponse = PaginatedNewsResponse(
+            page = 1,
+            pages = 2,
+            view = "hottest",
+            entries = listOf(
+                NewsEntry(
+                    id = "cached-hot-1",
+                    url = "https://example.com/cached-hot-1",
+                    title = "Cached Hot Story",
+                    domain = "example.com",
+                    site = "example",
+                    age = "2h",
+                    description = "Cached summary",
+                    score = 0.08
+                )
+            )
+        )
+        val cachedColdResponse = PaginatedNewsResponse(
+            page = 1,
+            pages = 2,
+            view = "coldest",
+            entries = listOf(
+                NewsEntry(
+                    id = "cached-cold-1",
+                    url = "https://example.com/cached-cold-1",
+                    title = "Cached Cold Story",
+                    domain = "example.com",
+                    site = "example",
+                    age = "4h",
+                    description = "Cached cold summary",
+                    score = 0.01
+                )
+            )
+        )
+
+        val storage = InMemoryNewsPreferencesStore(
+            initialEndpointCaches = mapOf(
+                "/api/hot" to cachedHotResponse,
+                "/api/cold?p=1" to cachedColdResponse
+            )
+        )
+
+        val client = APIClient(
+            baseUrl = "https://news.lucianmarin.com",
+            cacheStore = storage,
+            transport = { url ->
+                val path = url.path
+                val freshId = when (path) {
+                    "/api/hot" -> "fresh-hot-1"
+                    "/api/cold" -> "fresh-cold-1"
+                    else -> "fresh-other-1"
+                }
+                val body = """
+                    {
+                        "page": 1,
+                        "pages": 3,
+                        "view": "hottest",
+                        "entries": [
+                            {
+                                "id": "$freshId",
+                                "url": "https://example.com/$freshId",
+                                "title": "Fresh Story $freshId",
+                                "domain": "example.com",
+                                "site": "example",
+                                "pub": 1793200000.0,
+                                "age": "1h",
+                                "description": "Fresh summary",
+                                "score": 0.09
+                            }
+                        ]
+                    }
+                """.trimIndent()
+                200 to body
+            }
+        )
+
+        val controller = NewsStateController(
+            storage = storage,
+            apiClient = client,
+            scope = this
+        )
+
+        // First paint before network call runs: immediately has cached /api/hot entries
+        assertEquals(listOf("cached-hot-1"), controller.uiState.value.entries.map { it.id })
+        assertTrue(controller.uiState.value.isShowingCachedContent)
+
+        // When /api/hot endpoint content is ready, it draws in place of cache
+        controller.loadFeed(reset = true)
+        assertEquals(listOf("fresh-hot-1"), controller.uiState.value.entries.map { it.id })
+        assertFalse(controller.uiState.value.isShowingCachedContent)
+        assertEquals("fresh-hot-1", storage.getEndpointCache("/api/hot")?.entries?.first()?.id)
+
+        // Switching to Coldest immediately draws cached /api/cold on first paint before network completes
+        controller.selectTab(FeedTab.COLD)
+        assertEquals(listOf("cached-cold-1"), controller.uiState.value.entries.map { it.id })
+        assertTrue(controller.uiState.value.isShowingCachedContent)
+
+        // When /api/cold endpoint content is ready, it draws in place of cache
+        controller.loadFeed(reset = true)
+        assertEquals(listOf("fresh-cold-1"), controller.uiState.value.entries.map { it.id })
+        assertFalse(controller.uiState.value.isShowingCachedContent)
+    }
 }

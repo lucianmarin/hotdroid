@@ -3,8 +3,10 @@ package com.lucianmarin.news.state
 import android.content.Context
 import android.content.SharedPreferences
 import com.lucianmarin.news.model.FeedTab
+import com.lucianmarin.news.model.PaginatedNewsResponse
 import com.lucianmarin.news.network.APIClient
 import com.lucianmarin.news.ui.theme.ThemeMode
+import java.util.concurrent.ConcurrentHashMap
 
 interface NewsPreferencesStore {
     fun getSelectedTab(): FeedTab
@@ -17,6 +19,10 @@ interface NewsPreferencesStore {
     fun setApiBaseUrl(url: String)
     fun getThemeMode(): ThemeMode
     fun setThemeMode(mode: ThemeMode)
+    fun getEndpointCache(endpoint: String): PaginatedNewsResponse? = null
+    fun setEndpointCache(endpoint: String, response: PaginatedNewsResponse) {}
+    fun getAllEndpointCaches(): Map<String, PaginatedNewsResponse> = emptyMap()
+    fun clearEndpointCaches() {}
 }
 
 class InMemoryNewsPreferencesStore(
@@ -24,8 +30,17 @@ class InMemoryNewsPreferencesStore(
     private var visitedUrls: Set<String> = emptySet(),
     private var visitedSites: Set<String> = emptySet(),
     private var apiBaseUrl: String = APIClient.DEFAULT_BASE_URL,
-    private var themeMode: ThemeMode = ThemeMode.SYSTEM
+    private var themeMode: ThemeMode = ThemeMode.SYSTEM,
+    initialEndpointCaches: Map<String, PaginatedNewsResponse> = emptyMap()
 ) : NewsPreferencesStore {
+    private val endpointCaches = ConcurrentHashMap<String, PaginatedNewsResponse>()
+
+    init {
+        for ((endpoint, response) in initialEndpointCaches) {
+            setEndpointCache(endpoint, response)
+        }
+    }
+
     override fun getSelectedTab(): FeedTab = selectedTab
     override fun setSelectedTab(tab: FeedTab) {
         selectedTab = tab
@@ -50,6 +65,24 @@ class InMemoryNewsPreferencesStore(
     override fun setThemeMode(mode: ThemeMode) {
         themeMode = mode
     }
+
+    override fun getEndpointCache(endpoint: String): PaginatedNewsResponse? {
+        val key = APIClient.cacheKeyForEndpoint(endpoint) ?: return null
+        return endpointCaches[key]
+    }
+
+    override fun setEndpointCache(endpoint: String, response: PaginatedNewsResponse) {
+        if (response.page != 1) return
+        val key = APIClient.cacheKeyForEndpoint(endpoint, page = response.page) ?: return
+        endpointCaches[key] = response
+    }
+
+    override fun getAllEndpointCaches(): Map<String, PaginatedNewsResponse> =
+        endpointCaches.toMap()
+
+    override fun clearEndpointCaches() {
+        endpointCaches.clear()
+    }
 }
 
 class SessionStorage(context: Context) : NewsPreferencesStore {
@@ -61,10 +94,13 @@ class SessionStorage(context: Context) : NewsPreferencesStore {
         private const val KEY_VISITED_SITES = "hotdroid.history.visitedSites"
         private const val KEY_API_BASE_URL = "hotdroid.config.apiBaseUrl"
         private const val KEY_THEME_MODE = "hotdroid.ui.themeMode"
+        private const val KEY_ENDPOINT_CACHE_PREFIX = "hotdroid.cache.endpoint."
     }
 
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private val memoryEndpointCaches = ConcurrentHashMap<String, PaginatedNewsResponse>()
 
     override fun getSelectedTab(): FeedTab {
         val raw = prefs.getString(KEY_SELECTED_TAB, FeedTab.HOT.id)
@@ -105,5 +141,61 @@ class SessionStorage(context: Context) : NewsPreferencesStore {
 
     override fun setThemeMode(mode: ThemeMode) {
         prefs.edit().putString(KEY_THEME_MODE, mode.id).apply()
+    }
+
+    override fun getEndpointCache(endpoint: String): PaginatedNewsResponse? {
+        val key = APIClient.cacheKeyForEndpoint(endpoint) ?: return null
+        memoryEndpointCaches[key]?.let { return it }
+        val rawJson = prefs.getString("$KEY_ENDPOINT_CACHE_PREFIX$key", null) ?: return null
+        return try {
+            APIClient.json.decodeFromString(PaginatedNewsResponse.serializer(), rawJson).also {
+                if (it.page == 1) {
+                    memoryEndpointCaches[key] = it
+                }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    override fun setEndpointCache(endpoint: String, response: PaginatedNewsResponse) {
+        if (response.page != 1) return
+        val key = APIClient.cacheKeyForEndpoint(endpoint, page = response.page) ?: return
+        memoryEndpointCaches[key] = response
+        try {
+            val encoded = APIClient.json.encodeToString(PaginatedNewsResponse.serializer(), response)
+            prefs.edit().putString("$KEY_ENDPOINT_CACHE_PREFIX$key", encoded).apply()
+        } catch (_: Exception) {
+        }
+    }
+
+    override fun getAllEndpointCaches(): Map<String, PaginatedNewsResponse> {
+        val result = mutableMapOf<String, PaginatedNewsResponse>()
+        for ((prefKey, value) in prefs.all) {
+            if (prefKey.startsWith(KEY_ENDPOINT_CACHE_PREFIX) && value is String) {
+                val endpoint = prefKey.removePrefix(KEY_ENDPOINT_CACHE_PREFIX)
+                val canonicalKey = APIClient.cacheKeyForEndpoint(endpoint) ?: continue
+                try {
+                    val decoded = APIClient.json.decodeFromString(PaginatedNewsResponse.serializer(), value)
+                    if (decoded.page == 1) {
+                        result[canonicalKey] = decoded
+                    }
+                } catch (_: Exception) {
+                }
+            }
+        }
+        result.putAll(memoryEndpointCaches)
+        return result
+    }
+
+    override fun clearEndpointCaches() {
+        memoryEndpointCaches.clear()
+        val editor = prefs.edit()
+        for (prefKey in prefs.all.keys) {
+            if (prefKey.startsWith(KEY_ENDPOINT_CACHE_PREFIX)) {
+                editor.remove(prefKey)
+            }
+        }
+        editor.apply()
     }
 }
