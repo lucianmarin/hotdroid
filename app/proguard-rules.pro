@@ -9,10 +9,10 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
--keep,includedescriptorclasses class com.lucianmarin.sub.model.**$$serializer { *; }
--keepclassmembers class com.lucianmarin.sub.model.** {
+-keep,includedescriptorclasses class com.lucianmarin.news.model.**$$serializer { *; }
+-keepclassmembers class com.lucianmarin.news.model.** {
     *** Companion;
 }
--keepclasseswithmembers class com.lucianmarin.sub.model.** {
+-keepclasseswithmembers class com.lucianmarin.news.model.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
