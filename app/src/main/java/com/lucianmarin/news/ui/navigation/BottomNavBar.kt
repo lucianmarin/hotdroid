@@ -48,10 +48,10 @@ fun BottomNavBar(
 
     Row(
         modifier = modifier
-            .shadow(elevation = 4.dp, shape = RoundedCornerShape(10.dp))
+            .shadow(elevation = 4.dp, shape = RoundedCornerShape(25.dp))
             .clip(RoundedCornerShape(10.dp))
             .background(NewsTheme.floatingBarBackground)
-            .padding(horizontal = 6.dp, vertical = 6.dp),
+            .padding(horizontal = 5.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -94,8 +94,8 @@ private fun BottomNavTextButton(
 
     Box(
         modifier = Modifier
-            .height(34.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .height(35.dp)
+            .clip(RoundedCornerShape(20.dp))
             .background(bgColor)
             .semantics { contentDescription = contentDesc }
             .clickable(
@@ -103,7 +103,7 @@ private fun BottomNavTextButton(
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 15.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -111,7 +111,7 @@ private fun BottomNavTextButton(
             fontFamily = Route159FontFamily,
             fontWeight = FontWeight.Bold,
             fontSize = 14.sp,
-            lineHeight = 20.sp,
+            lineHeight = 25.sp,
             color = textColor
         )
     }

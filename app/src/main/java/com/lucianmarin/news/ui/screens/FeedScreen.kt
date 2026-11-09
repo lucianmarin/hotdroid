@@ -147,7 +147,7 @@ fun FeedScreen(
                                 fontFamily = Route159FontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp,
-                                lineHeight = 16.sp,
+                                lineHeight = 20.sp,
                                 color = NewsTheme.primaryText,
                                 modifier = Modifier.clickable(
                                     interactionSource = remember { MutableInteractionSource() },
@@ -218,7 +218,7 @@ fun FeedScreen(
                                     text = "Loading more...",
                                     fontFamily = Route159FontFamily,
                                     fontSize = 13.sp,
-                                    lineHeight = 16.sp,
+                                    lineHeight = 20.sp,
                                     color = NewsTheme.gray
                                 )
                             }
@@ -253,7 +253,7 @@ fun FeedScreen(
                                 text = if (uiState.loadMoreError) "Retry" else "Load more",
                                 fontFamily = Route159FontFamily,
                                 fontSize = 13.sp,
-                                lineHeight = 16.sp,
+                                lineHeight = 20.sp,
                                 color = if (uiState.loadMoreError) NewsTheme.accent else NewsTheme.gray
                             )
                         }

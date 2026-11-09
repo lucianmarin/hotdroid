@@ -233,7 +233,7 @@ private val NewsTypography = Typography(
         fontFamily = Route159FontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 13.sp,
-        lineHeight = 16.sp
+        lineHeight = 20.sp
     )
 )
 

@@ -51,7 +51,7 @@ fun MainScaffold(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(bottom = 10.dp)
+                .padding(bottom = 15.dp)
         )
     }
 }

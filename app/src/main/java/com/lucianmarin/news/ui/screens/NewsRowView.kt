@@ -76,7 +76,7 @@ fun NewsRowView(
                         fontFamily = Route159FontFamily,
                         fontWeight = FontWeight.Normal,
                         fontSize = 13.sp,
-                        lineHeight = 16.sp,
+                        lineHeight = 20.sp,
                         color = NewsTheme.primaryText,
                         modifier = Modifier.clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -90,7 +90,7 @@ fun NewsRowView(
                         fontFamily = Route159FontFamily,
                         fontWeight = FontWeight.Normal,
                         fontSize = 13.sp,
-                        lineHeight = 16.sp,
+                        lineHeight = 20.sp,
                         color = NewsTheme.gray
                     )
 
@@ -99,7 +99,7 @@ fun NewsRowView(
                         fontFamily = Route159FontFamily,
                         fontWeight = FontWeight.Normal,
                         fontSize = 13.sp,
-                        lineHeight = 16.sp,
+                        lineHeight = 20.sp,
                         color = NewsTheme.accent
                     )
 
