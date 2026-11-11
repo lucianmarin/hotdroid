@@ -1,5 +1,11 @@
 # Hotdroid — Hotnews for Android
 
+![feature](feature.png)
+
+Light              |Dark
+:-----------------:|:---------------:
+![light](light.jpg)|![dark](dark.jpg)
+
 Native Android client for [Hotnews](https://news.lucianmarin.com) (`news.lucianmarin.com/api`), built with **Kotlin** and **Jetpack Compose**, mirroring the design of `../macnews` for macOS and the floating bottom navigation bar architecture of `../subdroid`.
 
 ---
@@ -170,4 +176,3 @@ hotdroid/
 # Build debug APK
 ./gradlew assembleDebug
 ```
-
