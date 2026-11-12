@@ -26,9 +26,9 @@ Native Android client for [Hotnews](https://news.lucianmarin.com) (`news.lucianm
   - [x] Coroutine-based `APIClient` fetching `/api/hot`, `/api/cold`, `/api/new`, and `/api/{site}` from `https://news.lucianmarin.com`, with per-endpoint first-page caching (`?p=1` normalized to the plain endpoint call without `p` parameters).
   - [x] `NewsStateController` & `AppStateViewModel` managing active section (`Hottest`, `Coldest`, `Newest`), site/domain filter selection & closing back to `Hottest`, first-paint rendering from per-endpoint cache replaced in place when live endpoint content arrives, infinite scroll pagination, pull-to-refresh, and visited article/site persistence.
 - [x] **Jetpack Compose UI (`NewsTheme`, `MainScaffold`, `BottomNavBar`, `FeedScreen`, `NewsRowView`)**:
-  - [x] Floating text-only bottom navigation bar (`BottomNavBar`) styled after `../subdroid`:
-    - Displays **Hottest**, **Coldest**, and **Newest** sections.
-    - When a site/domain is selected, displays the selected `<site>` option alongside a separate multiply sign (`×`) option/icon in the nav bar for closing the filter and returning to the **Hottest** section (also supported via Android system back).
+  - [x] Floating bottom navigation bar (`BottomNavBar`) styled after `../subdroid`:
+    - Displays **Hottest** (`Icons.Rounded.LocalFireDepartment`), **Coldest** (`Icons.Rounded.AcUnit`), and **Newest** (`Icons.Rounded.AccessTimeFilled`) sections with native Material Rounded icons when active.
+    - When a site/domain is selected, displays the selected `<site>` option with `Icons.Rounded.StickyNote2` alongside a `Icons.Rounded.HighlightOff` close icon button in the nav bar for closing the filter and returning to the **Hottest** section (also supported via Android system back).
   - [x] Alternating odd/even row highlighting (`#F0F0F0` Light / `#141414` Dark on odd rows; `#FFFFFF` Light / `#000000` Dark on even rows) with `1.dp` `--gainsboro` dividers between stories (no divider above the first story or below the last story) and a centered `520.dp` reading column (`560.dp` max width with `20.dp` horizontal padding).
   - [x] Article rows matching `news.lucianmarin.com` and `../macnews` (`site` + `age ago` + `score°` in `#FF4500`, bold clickable headline with visited state, 480-char `--darkgray` summary).
   - [x] Pull-to-refresh (`PullToRefreshBox`) and automatic infinite scroll (`LazyColumn` loading `?p=2`, `?p=3`, ...).
@@ -83,13 +83,13 @@ Colors adapt to System, Light, or Dark mode, with OS status bar and navigation b
 ### 3.3 Floating Bottom Navigation Bar (`BottomNavBar.kt`)
 
 - Styled after `../subdroid`'s `SidebarView`, floating centered at the bottom with `10.dp` bottom margin (`navigationBarsPadding().padding(bottom = 10.dp)`), `10.dp` corner radius, `4.dp` shadow elevation, `6.dp` inner padding, and `4.dp` spacing between buttons (`46.dp` total bar height).
-- **Text-Only Section Mode (`selectedSite == null`)**:
-  - Displays 3 text-only buttons: **Hottest** (`/api/hot`), **Coldest** (`/api/cold`), and **Newest** (`/api/new`).
-  - Selected section uses `NewsTheme.accent` (`#FF4500`) pill background (`34.dp` height, `10.dp` corner radius, `12.dp` horizontal padding) with `NewsTheme.background` text; unselected sections use `NewsTheme.gray` text on a transparent background.
+- **Section Mode (`selectedSite == null`)**:
+  - Displays 3 buttons: **Hottest** (`/api/hot`), **Coldest** (`/api/cold`), and **Newest** (`/api/new`).
+  - Selected section uses `NewsTheme.accent` (`#FF4500`) pill background with `NewsTheme.background` text and its native Material Rounded icon (`Icons.Rounded.LocalFireDepartment` for Hottest, `Icons.Rounded.AcUnit` for Coldest, `Icons.Rounded.AccessTimeFilled` for Newest); unselected sections use `NewsTheme.gray` text on a transparent background.
 - **Site / Domain Filter Mode (`selectedSite != null`)**:
   - Tapping a site/domain name in any article row filters the feed to `/api/{site}`.
-  - The floating bottom navigation bar replaces the 3 section buttons with two options: the active `<site>` button (highlighted in `NewsTheme.accent` with `NewsTheme.background` text) and a separate multiply sign (`×`, `U+00D7`) option/icon next to it.
-  - Tapping the `×` option (or pressing the Android system Back button) closes the site filter and returns to the **Hottest** section (`/api/hot`).
+  - The floating bottom navigation bar replaces the 3 section buttons with two options: the active `<site>` button (highlighted in `NewsTheme.accent` with `NewsTheme.background` text and `Icons.Rounded.StickyNote2`) and a `Icons.Rounded.HighlightOff` close icon button next to it.
+  - Tapping the close icon button (or pressing the Android system Back button) closes the site filter and returns to the **Hottest** section (`/api/hot`).
 
 ### 3.4 App Icon (`../macnews/icon.svg`)
 

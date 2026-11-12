@@ -1,5 +1,11 @@
 package com.lucianmarin.news
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AcUnit
+import androidx.compose.material.icons.rounded.AccessTimeFilled
+import androidx.compose.material.icons.rounded.HighlightOff
+import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.StickyNote2
 import com.lucianmarin.news.model.FeedTab
 import com.lucianmarin.news.model.NewsEntry
 import com.lucianmarin.news.model.NewsFormatter
@@ -7,6 +13,9 @@ import com.lucianmarin.news.model.PaginatedNewsResponse
 import com.lucianmarin.news.network.APIClient
 import com.lucianmarin.news.state.InMemoryNewsPreferencesStore
 import com.lucianmarin.news.state.NewsStateController
+import com.lucianmarin.news.ui.navigation.ActiveSiteNavIcon
+import com.lucianmarin.news.ui.navigation.CloseSiteNavIcon
+import com.lucianmarin.news.ui.navigation.activeIcon
 import com.lucianmarin.news.ui.screens.isOddNewsRow
 import com.lucianmarin.news.ui.screens.shouldShowBottomDivider
 import com.lucianmarin.news.ui.screens.shouldShowTopDivider
@@ -20,7 +29,7 @@ import org.junit.Test
 class HotnewsTest {
 
     @Test
-    fun `bottom navigation sections map to Hottest, Coldest, and Newest endpoints`() {
+    fun `bottom navigation sections map to Hottest, Coldest, and Newest endpoints and active icons`() {
         assertEquals(listOf(FeedTab.HOT, FeedTab.COLD, FeedTab.NEW), FeedTab.entries)
         assertEquals("Hottest", FeedTab.HOT.title)
         assertEquals("Coldest", FeedTab.COLD.title)
@@ -28,6 +37,11 @@ class HotnewsTest {
         assertEquals("/api/hot", FeedTab.HOT.apiPath)
         assertEquals("/api/cold", FeedTab.COLD.apiPath)
         assertEquals("/api/new", FeedTab.NEW.apiPath)
+        assertEquals(Icons.Rounded.LocalFireDepartment, FeedTab.HOT.activeIcon)
+        assertEquals(Icons.Rounded.AcUnit, FeedTab.COLD.activeIcon)
+        assertEquals(Icons.Rounded.AccessTimeFilled, FeedTab.NEW.activeIcon)
+        assertEquals(Icons.Rounded.StickyNote2, ActiveSiteNavIcon)
+        assertEquals(Icons.Rounded.HighlightOff, CloseSiteNavIcon)
     }
 
     @Test
