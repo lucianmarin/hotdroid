@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -101,7 +102,9 @@ fun FeedScreen(
                 isRefreshing = isPullRefreshing,
                 containerColor = NewsTheme.oddRowBackground,
                 color = NewsTheme.accent,
-                modifier = Modifier.align(Alignment.TopCenter)
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
             )
         }
     ) {
@@ -109,6 +112,15 @@ fun FeedScreen(
             state = listState,
             modifier = Modifier.fillMaxSize()
         ) {
+            item(key = "top_status_bar_spacer") {
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(NewsTheme.oddRowBackground)
+                        .statusBarsPadding()
+                )
+            }
+
             if (uiState.isLoading && uiState.entries.isEmpty()) {
                 item(key = "status_loading") {
                     FeedStatusRow {
