@@ -86,9 +86,10 @@ Colors adapt to System, Light, or Dark mode, with OS status bar and navigation b
 - **Section Mode (`selectedSite == null`)**:
   - Displays 3 buttons: **Hottest** (`/api/hot`), **Coldest** (`/api/cold`), and **Newest** (`/api/new`).
   - Selected section uses `NewsTheme.accent` (`#FF4500`) pill background with `NewsTheme.background` text and its native Material Rounded icon (`Icons.Rounded.LocalFireDepartment` for Hottest, `Icons.Rounded.AcUnit` for Coldest, `Icons.Rounded.AccessTimeFilled` for Newest); unselected sections use `NewsTheme.gray` text on a transparent background.
+  - Switching sections animates the pill background and text colors (`animateColorAsState`) and fades/expands the active icon in and out (`AnimatedVisibility` with `fadeIn`/`fadeOut` + `expandHorizontally`/`shrinkHorizontally` and `Crossfade`).
 - **Site / Domain Filter Mode (`selectedSite != null`)**:
   - Tapping a site/domain name in any article row filters the feed to `/api/{site}`.
-  - The floating bottom navigation bar replaces the 3 section buttons with two options: the active `<site>` button (highlighted in `NewsTheme.accent` with `NewsTheme.background` text and `Icons.Rounded.StickyNote2`) and a `Icons.Rounded.HighlightOff` close icon button next to it.
+  - The floating bottom navigation bar cross-fades (`AnimatedContent`) from the 3 section buttons to two options: the active `<site>` button (highlighted in `NewsTheme.accent` with `NewsTheme.background` text and `Icons.Rounded.StickyNote2`) and a `Icons.Rounded.HighlightOff` close icon button next to it.
   - Tapping the close icon button (or pressing the Android system Back button) closes the site filter and returns to the **Hottest** section (`/api/hot`).
 
 ### 3.4 App Icon (`../macnews/icon.svg`)

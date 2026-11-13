@@ -15,6 +15,7 @@ import com.lucianmarin.news.state.InMemoryNewsPreferencesStore
 import com.lucianmarin.news.state.NewsStateController
 import com.lucianmarin.news.ui.navigation.ActiveSiteNavIcon
 import com.lucianmarin.news.ui.navigation.CloseSiteNavIcon
+import com.lucianmarin.news.ui.navigation.NAV_BAR_FADE_DURATION_MS
 import com.lucianmarin.news.ui.navigation.activeIcon
 import com.lucianmarin.news.ui.screens.isOddNewsRow
 import com.lucianmarin.news.ui.screens.shouldShowBottomDivider
@@ -42,6 +43,7 @@ class HotnewsTest {
         assertEquals(Icons.Rounded.AccessTimeFilled, FeedTab.NEW.activeIcon)
         assertEquals(Icons.Rounded.StickyNote2, ActiveSiteNavIcon)
         assertEquals(Icons.Rounded.HighlightOff, CloseSiteNavIcon)
+        assertTrue(NAV_BAR_FADE_DURATION_MS > 0)
     }
 
     @Test
