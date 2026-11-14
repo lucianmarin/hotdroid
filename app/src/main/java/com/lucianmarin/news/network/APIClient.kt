@@ -218,6 +218,43 @@ class APIClient(
         return fetchEntries(path = endpointPath, page = page)
     }
 
+    /**
+     * Builds the sorted list of publications by calling `/api/new` across all pages (`1..pages`).
+     * Since `/api/new` returns one entry per domain, fetching all pages collects every active
+     * publication site on the server.
+     */
+    suspend fun fetchPublications(
+        onPageLoaded: ((List<String>) -> Unit)? = null
+    ): List<String> {
+        val sites = sortedSetOf<String>()
+        val firstPage = fetchFeed(tab = FeedTab.NEW, page = 1)
+        firstPage.entries.forEach { entry ->
+            val site = entry.siteLabel.trim()
+            if (site.isNotEmpty()) {
+                sites.add(site)
+            }
+        }
+        if (sites.isNotEmpty()) {
+            onPageLoaded?.invoke(sites.toList())
+        }
+
+        val totalPages = firstPage.resolvedPages
+        for (page in 2..totalPages) {
+            val response = fetchFeed(tab = FeedTab.NEW, page = page)
+            if (response.entries.isEmpty()) break
+            response.entries.forEach { entry ->
+                val site = entry.siteLabel.trim()
+                if (site.isNotEmpty()) {
+                    sites.add(site)
+                }
+            }
+            if (sites.isNotEmpty()) {
+                onPageLoaded?.invoke(sites.toList())
+            }
+        }
+        return sites.toList()
+    }
+
     suspend fun fetchEntries(path: String, page: Int = 1): PaginatedNewsResponse =
         withContext(Dispatchers.IO) {
             val url = try {

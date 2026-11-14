@@ -28,7 +28,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AcUnit
 import androidx.compose.material.icons.rounded.AccessTimeFilled
 import androidx.compose.material.icons.rounded.HighlightOff
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.StickyNote2
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -72,8 +75,24 @@ val FeedTab.activeIcon: ImageVector
 val ActiveSiteNavIcon: ImageVector
     get() = Icons.Rounded.StickyNote2
 
+val AboutNavIcon: ImageVector
+    get() = Icons.Rounded.Info
+
+val ActiveWebNavIcon: ImageVector
+    get() = Icons.Rounded.Public
+
+val ShareWebNavIcon: ImageVector
+    get() = Icons.Rounded.Share
+
 val CloseSiteNavIcon: ImageVector
     get() = Icons.Rounded.HighlightOff
+
+private sealed interface NavBarMode {
+    data object Tabs : NavBarMode
+    data class SiteFilter(val site: String) : NavBarMode
+    data class About(val site: String?) : NavBarMode
+    data class WebPage(val url: String, val domain: String) : NavBarMode
+}
 
 @Composable
 fun BottomNavBar(
@@ -81,12 +100,27 @@ fun BottomNavBar(
     onSelectTab: (FeedTab) -> Unit,
     onSelectSite: (String) -> Unit,
     onClearSite: () -> Unit,
+    onOpenAbout: () -> Unit = {},
+    onCloseAbout: () -> Unit = {},
+    onSelectWebDomain: () -> Unit = {},
+    onCopyWebUrl: (String) -> Unit = {},
+    onCloseWebPage: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val activeWebUrl = uiState.activeWebUrl?.takeIf { it.isNotBlank() }
     val activeSite = uiState.selectedSite?.takeIf { it.isNotBlank() }
+    val navBarMode: NavBarMode = when {
+        activeWebUrl != null -> {
+            val domain = uiState.resolvedWebDomain ?: NewsFormatter.domainName(activeWebUrl)
+            NavBarMode.WebPage(url = activeWebUrl, domain = domain)
+        }
+        uiState.isAboutOpen -> NavBarMode.About(site = activeSite)
+        activeSite != null -> NavBarMode.SiteFilter(site = activeSite)
+        else -> NavBarMode.Tabs
+    }
 
     AnimatedContent(
-        targetState = activeSite,
+        targetState = navBarMode,
         transitionSpec = {
             (fadeIn(
                 animationSpec = tween(
@@ -100,6 +134,14 @@ fun BottomNavBar(
                 )
             )).using(SizeTransform(clip = false))
         },
+        contentKey = { mode ->
+            when (mode) {
+                is NavBarMode.Tabs -> "tabs"
+                is NavBarMode.SiteFilter -> "site:${mode.site}"
+                is NavBarMode.About -> "about:${mode.site.orEmpty()}"
+                is NavBarMode.WebPage -> "web:${mode.domain}"
+            }
+        },
         contentAlignment = Alignment.Center,
         label = "BottomNavViewFade",
         modifier = modifier
@@ -107,34 +149,82 @@ fun BottomNavBar(
             .clip(RoundedCornerShape(10.dp))
             .background(NewsTheme.floatingBarBackground)
             .padding(horizontal = 5.dp, vertical = 5.dp)
-    ) { currentSite ->
+    ) { mode ->
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (currentSite != null) {
-                val siteLabel = NewsFormatter.siteNavigationLabel(currentSite)
-                BottomNavTextButton(
-                    title = siteLabel,
-                    contentDesc = siteLabel,
-                    isSelected = true,
-                    activeIcon = ActiveSiteNavIcon,
-                    onClick = { onSelectSite(siteLabel) }
-                )
-                BottomNavIconButton(
-                    icon = CloseSiteNavIcon,
-                    contentDesc = "Close $siteLabel and return to Hottest",
-                    onClick = onClearSite
-                )
-            } else {
-                for (tab in FeedTab.entries) {
-                    BottomNavTextButton(
-                        title = tab.title,
-                        contentDesc = tab.title,
-                        isSelected = uiState.selectedTab == tab,
-                        activeIcon = tab.activeIcon,
-                        onClick = { onSelectTab(tab) }
+            when (mode) {
+                is NavBarMode.WebPage -> {
+                    val domainLabel = NewsFormatter.siteNavigationLabel(mode.domain)
+                    BottomNavIconButton(
+                        icon = ShareWebNavIcon,
+                        contentDesc = "Copy URL to clipboard",
+                        onClick = { onCopyWebUrl(mode.url) }
                     )
+                    BottomNavTextButton(
+                        title = domainLabel,
+                        contentDesc = domainLabel,
+                        isSelected = true,
+                        activeIcon = ActiveWebNavIcon,
+                        onClick = onSelectWebDomain
+                    )
+                    BottomNavIconButton(
+                        icon = CloseSiteNavIcon,
+                        contentDesc = "Close $domainLabel",
+                        onClick = onCloseWebPage
+                    )
+                }
+                is NavBarMode.About -> {
+                    val siteLabel = mode.site?.let { NewsFormatter.siteNavigationLabel(it) }
+                    BottomNavTextButton(
+                        title = "About",
+                        contentDesc = "About",
+                        isSelected = true,
+                        activeIcon = AboutNavIcon,
+                        onClick = onOpenAbout
+                    )
+                    BottomNavIconButton(
+                        icon = ActiveSiteNavIcon,
+                        contentDesc = if (siteLabel != null) "Return to $siteLabel" else "Return to site feed",
+                        onClick = onCloseAbout
+                    )
+                    BottomNavIconButton(
+                        icon = CloseSiteNavIcon,
+                        contentDesc = "Close About and return to Hottest",
+                        onClick = onClearSite
+                    )
+                }
+                is NavBarMode.SiteFilter -> {
+                    val siteLabel = NewsFormatter.siteNavigationLabel(mode.site)
+                    BottomNavIconButton(
+                        icon = AboutNavIcon,
+                        contentDesc = "About",
+                        onClick = onOpenAbout
+                    )
+                    BottomNavTextButton(
+                        title = siteLabel,
+                        contentDesc = siteLabel,
+                        isSelected = true,
+                        activeIcon = ActiveSiteNavIcon,
+                        onClick = { onSelectSite(siteLabel) }
+                    )
+                    BottomNavIconButton(
+                        icon = CloseSiteNavIcon,
+                        contentDesc = "Close $siteLabel and return to Hottest",
+                        onClick = onClearSite
+                    )
+                }
+                is NavBarMode.Tabs -> {
+                    for (tab in FeedTab.entries) {
+                        BottomNavTextButton(
+                            title = tab.title,
+                            contentDesc = tab.title,
+                            isSelected = uiState.selectedTab == tab,
+                            activeIcon = tab.activeIcon,
+                            onClick = { onSelectTab(tab) }
+                        )
+                    }
                 }
             }
         }

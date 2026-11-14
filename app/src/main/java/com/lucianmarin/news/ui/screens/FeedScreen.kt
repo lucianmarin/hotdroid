@@ -1,9 +1,12 @@
 package com.lucianmarin.news.ui.screens
 
-import android.content.Context
+import android.annotation.SuppressLint
 import android.content.Intent
-import android.net.Uri
-import androidx.browser.customtabs.CustomTabsIntent
+import android.graphics.Bitmap
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -25,11 +28,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,11 +44,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lucianmarin.news.model.NewsEntry
+import androidx.compose.ui.viewinterop.AndroidView
 import com.lucianmarin.news.state.AppStateViewModel
 import com.lucianmarin.news.ui.theme.NewsTheme
 import com.lucianmarin.news.ui.theme.Route159FontFamily
@@ -61,7 +66,6 @@ fun FeedScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val pullState = rememberPullToRefreshState()
@@ -197,8 +201,7 @@ fun FeedScreen(
                         isVisited = uiState.visitedUrls.contains(entry.url),
                         onSelectSite = { site -> viewModel.selectSite(site) },
                         onOpenArticle = { clickedEntry ->
-                            viewModel.recordArticleOpened(clickedEntry)
-                            openArticleUrl(context, clickedEntry)
+                            viewModel.openArticle(clickedEntry)
                         },
                         showBottomDivider = shouldShowBottomDivider(
                             zeroBasedIndex = index,
@@ -315,26 +318,134 @@ private fun FeedStatusRow(
     }
 }
 
-private fun openArticleUrl(context: Context, entry: NewsEntry) {
-    val rawUrl = entry.url.trim()
-    if (rawUrl.isEmpty()) return
-    val uri = try {
-        Uri.parse(rawUrl)
-    } catch (_: Exception) {
-        return
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+fun ArticleWebViewScreen(
+    url: String,
+    isVisible: Boolean = true,
+    onUrlChanged: (String) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var lastLoadedInputUrl by remember { mutableStateOf<String?>(null) }
+    val bgColorArgb = NewsTheme.background.toArgb()
+
+    BackHandler(enabled = isVisible) {
+        val currentWebView = webViewRef
+        if (currentWebView != null && currentWebView.canGoBack()) {
+            currentWebView.goBack()
+        } else {
+            onClose()
+        }
     }
-    try {
-        CustomTabsIntent.Builder()
-            .setShowTitle(true)
-            .build()
-            .launchUrl(context, uri)
-    } catch (_: Exception) {
-        try {
-            val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    DisposableEffect(Unit) {
+        onDispose {
+            webViewRef?.stopLoading()
+            webViewRef?.destroy()
+            webViewRef = null
+        }
+    }
+
+    Column(
+        modifier = if (isVisible) {
+            modifier
+                .fillMaxSize()
+                .background(NewsTheme.background)
+        } else {
+            Modifier.size(0.dp)
+        }
+    ) {
+        if (isVisible) {
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(NewsTheme.oddRowBackground)
+                    .statusBarsPadding()
+            )
+        }
+
+        Box(modifier = if (isVisible) Modifier.fillMaxSize() else Modifier.size(0.dp)) {
+            AndroidView(
+                factory = { context ->
+                    WebView(context).apply {
+                        setBackgroundColor(bgColorArgb)
+                        visibility = if (isVisible) android.view.View.VISIBLE else android.view.View.GONE
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            loadWithOverviewMode = true
+                            useWideViewPort = true
+                            builtInZoomControls = true
+                            displayZoomControls = false
+                            setSupportZoom(true)
+                        }
+                        webViewClient = object : WebViewClient() {
+                            override fun onPageStarted(view: WebView?, startedUrl: String?, favicon: Bitmap?) {
+                                super.onPageStarted(view, startedUrl, favicon)
+                                isLoading = true
+                                if (!startedUrl.isNullOrBlank()) {
+                                    onUrlChanged(startedUrl)
+                                }
+                            }
+
+                            override fun onPageFinished(view: WebView?, finishedUrl: String?) {
+                                super.onPageFinished(view, finishedUrl)
+                                isLoading = false
+                                if (!finishedUrl.isNullOrBlank()) {
+                                    onUrlChanged(finishedUrl)
+                                }
+                            }
+
+                            override fun doUpdateVisitedHistory(view: WebView?, visitedUrl: String?, isReload: Boolean) {
+                                super.doUpdateVisitedHistory(view, visitedUrl, isReload)
+                                if (!visitedUrl.isNullOrBlank()) {
+                                    onUrlChanged(visitedUrl)
+                                }
+                            }
+
+                            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                                val targetUri = request?.url ?: return false
+                                val scheme = targetUri.scheme?.lowercase()
+                                if (scheme == "http" || scheme == "https") {
+                                    return false
+                                }
+                                return try {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, targetUri))
+                                    true
+                                } catch (_: Exception) {
+                                    true
+                                }
+                            }
+                        }
+                        webViewRef = this
+                        lastLoadedInputUrl = url
+                        loadUrl(url)
+                    }
+                },
+                update = { webView ->
+                    webView.setBackgroundColor(bgColorArgb)
+                    webView.visibility = if (isVisible) android.view.View.VISIBLE else android.view.View.GONE
+                    if (url != lastLoadedInputUrl && url != webView.url) {
+                        lastLoadedInputUrl = url
+                        webView.loadUrl(url)
+                    }
+                },
+                modifier = if (isVisible) Modifier.fillMaxSize() else Modifier.size(0.dp)
+            )
+
+            if (isVisible && isLoading) {
+                LinearProgressIndicator(
+                    color = NewsTheme.accent,
+                    trackColor = NewsTheme.oddRowBackground,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .align(Alignment.TopCenter)
+                )
             }
-            context.startActivity(intent)
-        } catch (_: Exception) {
         }
     }
 }

@@ -6,8 +6,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lucianmarin.news.model.FeedTab
 import com.lucianmarin.news.model.NewsEntry
+import com.lucianmarin.news.model.NewsFormatter
 import com.lucianmarin.news.model.PaginatedNewsResponse
 import com.lucianmarin.news.network.APIClient
+import com.lucianmarin.news.ui.screens.AboutContent
 import com.lucianmarin.news.ui.theme.ThemeMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -19,9 +21,24 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.math.max
 
+data class NavigationHistoryEntry(
+    val selectedTab: FeedTab,
+    val selectedSite: String?,
+    val isAboutOpen: Boolean = false,
+    val entries: List<NewsEntry>,
+    val currentPage: Int,
+    val totalPages: Int,
+    val isShowingCachedContent: Boolean,
+    val activeWebUrl: String?,
+    val activeWebDomain: String?,
+    val activeWebSite: String?
+)
+
 data class AppUiState(
     val selectedTab: FeedTab = FeedTab.HOT,
     val selectedSite: String? = null,
+    val isAboutOpen: Boolean = false,
+    val publications: List<String> = AboutContent.DEFAULT_PUBLICATIONS,
     val entries: List<NewsEntry> = emptyList(),
     val currentPage: Int = 1,
     val totalPages: Int = 1,
@@ -34,13 +51,35 @@ data class AppUiState(
     val visitedSites: Set<String> = emptySet(),
     val apiBaseUrl: String = APIClient.DEFAULT_BASE_URL,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val scrollResetVersion: Int = 0
+    val scrollResetVersion: Int = 0,
+    val activeWebUrl: String? = null,
+    val activeWebDomain: String? = null,
+    val activeWebSite: String? = null,
+    val navigationHistory: List<NavigationHistoryEntry> = emptyList()
 ) {
     val canLoadMore: Boolean
         get() = currentPage < totalPages && entries.isNotEmpty()
 
     val isSiteSelected: Boolean
         get() = !selectedSite.isNullOrBlank()
+
+    val isWebPageOpen: Boolean
+        get() = !activeWebUrl.isNullOrBlank()
+
+    val canNavigateBack: Boolean
+        get() = isWebPageOpen || isAboutOpen || navigationHistory.isNotEmpty() || isSiteSelected
+
+    val retainedWebUrl: String?
+        get() = activeWebUrl?.takeIf { it.isNotBlank() }
+            ?: navigationHistory.lastOrNull { !it.activeWebUrl.isNullOrBlank() }?.activeWebUrl
+
+    val resolvedWebDomain: String?
+        get() = activeWebDomain?.takeIf { it.isNotBlank() }
+            ?: activeWebUrl?.let { NewsFormatter.domainName(it) }?.takeIf { it.isNotBlank() }
+
+    val resolvedWebSite: String?
+        get() = activeWebSite?.takeIf { it.isNotBlank() }
+            ?: resolvedWebDomain?.let { NewsFormatter.siteName(it) }?.takeIf { it.isNotBlank() }
 
     val activeFeedPath: String
         get() = if (!selectedSite.isNullOrBlank()) {
@@ -109,6 +148,8 @@ class NewsStateController(
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
     private var activeLoadJob: Job? = null
+    private var publicationsLoadJob: Job? = null
+    private var hasLoadedPublicationsFromApi: Boolean = false
 
     fun getCachedResponseForEndpoint(endpoint: String, page: Int = 1): PaginatedNewsResponse? {
         val key = APIClient.cacheKeyForEndpoint(endpoint, page) ?: return null
@@ -166,6 +207,11 @@ class NewsStateController(
             state.copy(
                 selectedTab = tab,
                 selectedSite = null,
+                isAboutOpen = false,
+                activeWebUrl = null,
+                activeWebDomain = null,
+                activeWebSite = null,
+                navigationHistory = emptyList(),
                 entries = nextEntries,
                 currentPage = nextCurrentPage,
                 totalPages = nextTotalPages,
@@ -176,7 +222,7 @@ class NewsStateController(
                 scrollResetVersion = state.scrollResetVersion + 1
             )
         }
-        if (wasSameSelection || current.selectedTab != tab || current.selectedSite != null) {
+        if (wasSameSelection || current.selectedTab != tab || current.selectedSite != null || current.isAboutOpen) {
             triggerLoad(reset = true)
         }
     }
@@ -206,6 +252,10 @@ class NewsStateController(
             }
             state.copy(
                 selectedSite = cleaned,
+                isAboutOpen = false,
+                activeWebUrl = null,
+                activeWebDomain = null,
+                activeWebSite = null,
                 entries = nextEntries,
                 currentPage = nextCurrentPage,
                 totalPages = nextTotalPages,
@@ -224,13 +274,18 @@ class NewsStateController(
      */
     fun clearSiteFilter() {
         val current = _uiState.value
-        if (current.selectedSite == null && current.selectedTab == FeedTab.HOT) return
+        if (current.selectedSite == null && current.selectedTab == FeedTab.HOT && !current.isWebPageOpen && !current.isAboutOpen) return
         val cached = getCachedResponseForSelection(selectedTab = FeedTab.HOT, selectedSite = null)
         storage.setSelectedTab(FeedTab.HOT)
         _uiState.update { state ->
             state.copy(
                 selectedTab = FeedTab.HOT,
                 selectedSite = null,
+                isAboutOpen = false,
+                activeWebUrl = null,
+                activeWebDomain = null,
+                activeWebSite = null,
+                navigationHistory = emptyList(),
                 entries = cached?.entries ?: emptyList(),
                 currentPage = cached?.page ?: 1,
                 totalPages = cached?.let { resolveTotalPages(it) } ?: 1,
@@ -409,6 +464,232 @@ class NewsStateController(
         markSiteVisited(entry.siteLabel)
     }
 
+    fun openAboutPage() {
+        _uiState.update {
+            it.copy(
+                isAboutOpen = true,
+                activeWebUrl = null,
+                activeWebDomain = null,
+                activeWebSite = null
+            )
+        }
+        if (!hasLoadedPublicationsFromApi && publicationsLoadJob?.isActive != true) {
+            publicationsLoadJob = scope.launch {
+                loadPublications()
+            }
+        }
+    }
+
+    suspend fun loadPublications(force: Boolean = false): List<String> {
+        if (hasLoadedPublicationsFromApi && !force) {
+            return _uiState.value.publications
+        }
+        return try {
+            val fetched = apiClient.fetchPublications { partialSites ->
+                if (partialSites.isNotEmpty()) {
+                    _uiState.update { it.copy(publications = partialSites) }
+                }
+            }
+            if (fetched.isNotEmpty()) {
+                hasLoadedPublicationsFromApi = true
+                _uiState.update { it.copy(publications = fetched) }
+                fetched
+            } else {
+                _uiState.value.publications
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            _uiState.value.publications
+        }
+    }
+
+    fun closeAboutPage() {
+        _uiState.update {
+            it.copy(
+                isAboutOpen = false
+            )
+        }
+    }
+
+    fun openWebUrl(url: String) {
+        val cleanUrl = url.trim()
+        if (cleanUrl.isEmpty()) return
+        if (cleanUrl == "/") {
+            clearSiteFilter()
+            return
+        }
+        if (cleanUrl.startsWith("/")) {
+            val site = cleanUrl.removePrefix("/").trim()
+            if (site.isNotEmpty()) {
+                selectSite(site)
+            }
+            return
+        }
+        markArticleVisited(cleanUrl)
+        val domain = NewsFormatter.domainName(cleanUrl)
+        val site = NewsFormatter.siteName(domain.ifBlank { cleanUrl })
+        _uiState.update {
+            it.copy(
+                activeWebUrl = cleanUrl,
+                activeWebDomain = domain,
+                activeWebSite = site
+            )
+        }
+    }
+
+    fun openArticle(entry: NewsEntry) {
+        val cleanUrl = entry.url.trim()
+        if (cleanUrl.isEmpty()) return
+        recordArticleOpened(entry)
+        val domain = entry.domainLabel.ifBlank { NewsFormatter.domainName(cleanUrl) }
+        val site = entry.siteLabel.ifBlank { NewsFormatter.siteName(domain.ifBlank { cleanUrl }) }
+        _uiState.update {
+            it.copy(
+                activeWebUrl = cleanUrl,
+                activeWebDomain = domain,
+                activeWebSite = site
+            )
+        }
+    }
+
+    fun updateActiveWebUrl(url: String) {
+        val cleanUrl = url.trim()
+        if (cleanUrl.isEmpty()) return
+        val domain = NewsFormatter.domainName(cleanUrl)
+        val site = NewsFormatter.siteName(domain.ifBlank { cleanUrl })
+        _uiState.update { state ->
+            if (!state.isWebPageOpen) {
+                state
+            } else {
+                state.copy(
+                    activeWebUrl = cleanUrl,
+                    activeWebDomain = domain.ifBlank { state.activeWebDomain },
+                    activeWebSite = site.ifBlank { state.activeWebSite }
+                )
+            }
+        }
+    }
+
+    fun closeWebPage() {
+        _uiState.update {
+            it.copy(
+                activeWebUrl = null,
+                activeWebDomain = null,
+                activeWebSite = null
+            )
+        }
+    }
+
+    fun selectSiteFromWebPage() {
+        val current = _uiState.value
+        val targetSite = current.resolvedWebSite ?: return
+        val cleaned = targetSite.trim()
+        if (cleaned.isEmpty()) return
+
+        val historySnapshot = NavigationHistoryEntry(
+            selectedTab = current.selectedTab,
+            selectedSite = current.selectedSite,
+            isAboutOpen = current.isAboutOpen,
+            entries = current.entries,
+            currentPage = current.currentPage,
+            totalPages = current.totalPages,
+            isShowingCachedContent = current.isShowingCachedContent,
+            activeWebUrl = current.activeWebUrl,
+            activeWebDomain = current.activeWebDomain,
+            activeWebSite = current.activeWebSite
+        )
+
+        val wasSameSite = current.selectedSite == cleaned
+        val cached = getCachedResponseForSelection(selectedTab = current.selectedTab, selectedSite = cleaned)
+        markSiteVisited(cleaned)
+        _uiState.update { state ->
+            val nextEntries = when {
+                cached != null -> cached.entries
+                !wasSameSite -> emptyList()
+                else -> state.entries
+            }
+            val nextCurrentPage = when {
+                cached != null -> cached.page
+                !wasSameSite -> 1
+                else -> state.currentPage
+            }
+            val nextTotalPages = when {
+                cached != null -> resolveTotalPages(cached)
+                !wasSameSite -> 1
+                else -> state.totalPages
+            }
+            state.copy(
+                selectedSite = cleaned,
+                isAboutOpen = false,
+                activeWebUrl = null,
+                activeWebDomain = null,
+                activeWebSite = null,
+                navigationHistory = state.navigationHistory + historySnapshot,
+                entries = nextEntries,
+                currentPage = nextCurrentPage,
+                totalPages = nextTotalPages,
+                isShowingCachedContent = cached != null,
+                isLoadingMore = false,
+                loadMoreError = false,
+                errorMessage = null,
+                scrollResetVersion = state.scrollResetVersion + 1
+            )
+        }
+        triggerLoad(reset = true)
+    }
+
+    /**
+     * Handles OS Back navigation:
+     * - If a web page is open, closes the web page and returns to the feed or About page behind it.
+     * - If the About page is open, closes the About page and returns to the site filter feed.
+     * - If navigation history has a saved entry (e.g. a web page from which the domain pill was clicked),
+     *   restores that web page and its underlying feed state.
+     * - Otherwise, if a site filter is active, clears the site filter back to Hottest.
+     */
+    fun navigateBack() {
+        val current = _uiState.value
+        if (current.isWebPageOpen) {
+            closeWebPage()
+            return
+        }
+        if (current.isAboutOpen) {
+            closeAboutPage()
+            return
+        }
+        val previous = current.navigationHistory.lastOrNull()
+        if (previous != null) {
+            activeLoadJob?.cancel()
+            storage.setSelectedTab(previous.selectedTab)
+            _uiState.update { state ->
+                state.copy(
+                    selectedTab = previous.selectedTab,
+                    selectedSite = previous.selectedSite,
+                    isAboutOpen = previous.isAboutOpen,
+                    entries = previous.entries,
+                    currentPage = previous.currentPage,
+                    totalPages = previous.totalPages,
+                    isShowingCachedContent = previous.isShowingCachedContent,
+                    isLoading = false,
+                    isLoadingMore = false,
+                    loadMoreError = false,
+                    errorMessage = null,
+                    activeWebUrl = previous.activeWebUrl,
+                    activeWebDomain = previous.activeWebDomain,
+                    activeWebSite = previous.activeWebSite,
+                    navigationHistory = state.navigationHistory.dropLast(1)
+                )
+            }
+            if (previous.entries.isEmpty() && !previous.isAboutOpen) {
+                triggerLoad(reset = true)
+            }
+            return
+        }
+        if (current.isSiteSelected) {
+            clearSiteFilter()
+        }
+    }
+
     fun updateApiBaseUrl(newUrl: String) {
         val normalized = APIClient.normalizeBaseUrl(newUrl)
         apiClient.updateBaseUrl(normalized)
@@ -475,6 +756,17 @@ class AppStateViewModel(application: Application) : AndroidViewModel(application
     suspend fun loadFeed(reset: Boolean) = controller.loadFeed(reset)
     suspend fun loadMoreIfNeeded(currentEntry: NewsEntry) = controller.loadMoreIfNeeded(currentEntry)
     fun recordArticleOpened(entry: NewsEntry) = controller.recordArticleOpened(entry)
+    fun openAboutPage() = controller.openAboutPage()
+
+    fun closeAboutPage() = controller.closeAboutPage()
+
+    fun openWebUrl(url: String) = controller.openWebUrl(url)
+
+    fun openArticle(entry: NewsEntry) = controller.openArticle(entry)
+    fun updateActiveWebUrl(url: String) = controller.updateActiveWebUrl(url)
+    fun closeWebPage() = controller.closeWebPage()
+    fun selectSiteFromWebPage() = controller.selectSiteFromWebPage()
+    fun navigateBack() = controller.navigateBack()
     fun updateApiBaseUrl(newUrl: String) = controller.updateApiBaseUrl(newUrl)
     fun updateThemeMode(mode: ThemeMode) = controller.updateThemeMode(mode)
 

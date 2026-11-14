@@ -89,15 +89,17 @@ object NewsFormatter {
     }
 
     /**
-     * Mirrors `sitename(value)` in `../news/app/filters.py` and `NewsFormatter.siteName` in `../macnews`.
+     * Extracts the clean domain name (e.g. `macrumors.com`, `theregister.co.uk`) from a domain or URL.
      */
-    fun siteName(fromDomainOrUrl: String): String {
+    fun domainName(fromDomainOrUrl: String): String {
         var host = fromDomainOrUrl.trim()
         if (host.contains("://")) {
             try {
                 val parsedHost = URI(host).host
                 if (!parsedHost.isNullOrBlank()) {
                     host = parsedHost
+                } else {
+                    host = host.substringAfter("://").substringBefore("/")
                 }
             } catch (_: Exception) {
                 host = host.substringAfter("://").substringBefore("/")
@@ -105,9 +107,18 @@ object NewsFormatter {
         } else if (host.contains("/")) {
             host = host.substringBefore("/")
         }
+        host = host.substringBefore("?").substringBefore("#").substringBefore(":")
         if (host.lowercase().startsWith("www.")) {
             host = host.drop(4)
         }
+        return host
+    }
+
+    /**
+     * Mirrors `sitename(value)` in `../news/app/filters.py` and `NewsFormatter.siteName` in `../macnews`.
+     */
+    fun siteName(fromDomainOrUrl: String): String {
+        val host = domainName(fromDomainOrUrl)
         val parts = host.split(".").filter { it.isNotEmpty() }
         if (parts.size < 2) {
             return host
@@ -153,6 +164,9 @@ data class NewsEntry(
         get() = site.ifBlank {
             NewsFormatter.siteName(domain.ifBlank { url })
         }
+
+    val domainLabel: String
+        get() = NewsFormatter.domainName(domain.ifBlank { url })
 
     val resolvedAge: String
         get() = age.ifBlank { NewsFormatter.shortDate(pub) }

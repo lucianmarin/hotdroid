@@ -4,7 +4,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AcUnit
 import androidx.compose.material.icons.rounded.AccessTimeFilled
 import androidx.compose.material.icons.rounded.HighlightOff
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.StickyNote2
 import com.lucianmarin.news.model.FeedTab
 import com.lucianmarin.news.model.NewsEntry
@@ -13,10 +16,14 @@ import com.lucianmarin.news.model.PaginatedNewsResponse
 import com.lucianmarin.news.network.APIClient
 import com.lucianmarin.news.state.InMemoryNewsPreferencesStore
 import com.lucianmarin.news.state.NewsStateController
+import com.lucianmarin.news.ui.navigation.AboutNavIcon
 import com.lucianmarin.news.ui.navigation.ActiveSiteNavIcon
+import com.lucianmarin.news.ui.navigation.ActiveWebNavIcon
 import com.lucianmarin.news.ui.navigation.CloseSiteNavIcon
 import com.lucianmarin.news.ui.navigation.NAV_BAR_FADE_DURATION_MS
+import com.lucianmarin.news.ui.navigation.ShareWebNavIcon
 import com.lucianmarin.news.ui.navigation.activeIcon
+import com.lucianmarin.news.ui.screens.AboutContent
 import com.lucianmarin.news.ui.screens.isOddNewsRow
 import com.lucianmarin.news.ui.screens.shouldShowBottomDivider
 import com.lucianmarin.news.ui.screens.shouldShowTopDivider
@@ -42,8 +49,35 @@ class HotnewsTest {
         assertEquals(Icons.Rounded.AcUnit, FeedTab.COLD.activeIcon)
         assertEquals(Icons.Rounded.AccessTimeFilled, FeedTab.NEW.activeIcon)
         assertEquals(Icons.Rounded.StickyNote2, ActiveSiteNavIcon)
+        assertEquals(Icons.Rounded.Info, AboutNavIcon)
+        assertEquals(Icons.Rounded.Public, ActiveWebNavIcon)
+        assertEquals(Icons.Rounded.Share, ShareWebNavIcon)
         assertEquals(Icons.Rounded.HighlightOff, CloseSiteNavIcon)
         assertTrue(NAV_BAR_FADE_DURATION_MS > 0)
+    }
+
+    @Test
+    fun `AboutContent builds 5 sections matching news about and privacy templates`() {
+        val sections = AboutContent.buildSections(listOf("wired", "9to5mac", "9to5google"))
+        assertEquals(5, sections.size)
+        assertEquals(
+            listOf(
+                "About Hotnews",
+                "Tech stack and support",
+                "Features and design constraints",
+                "3 publications",
+                "Contact and privacy"
+            ),
+            sections.map { it.title }
+        )
+        assertTrue(sections[0].plainTextParagraphs.first().startsWith("Welcome to a minimalist news aggregator"))
+        assertEquals(6, sections[1].plainTextParagraphs.size)
+        assertEquals(10, sections[2].plainTextParagraphs.size)
+        assertEquals("9to5google, 9to5mac, wired.", sections[3].plainTextParagraphs.single())
+        assertEquals(3, sections[4].plainTextParagraphs.size)
+        assertTrue(sections[4].plainTextParagraphs[0].contains("privacy policy"))
+        assertEquals("Gmail — marin.lucian", sections[4].plainTextParagraphs[1])
+        assertEquals("Phone — +40 726 210 589", sections[4].plainTextParagraphs[2])
     }
 
     @Test
@@ -81,6 +115,7 @@ class HotnewsTest {
 
         val entry = decoded.entries.first()
         assertEquals("macrumors", entry.siteLabel)
+        assertEquals("macrumors.com", entry.domainLabel)
         assertEquals("35h ago", entry.ageLabel)
         assertEquals(79, entry.resolvedDegrees)
         assertEquals("79°", entry.degreesLabel)
@@ -123,6 +158,8 @@ class HotnewsTest {
         assertEquals("macrumors", NewsFormatter.siteName("https://www.macrumors.com/story"))
         assertEquals("theregister", NewsFormatter.siteName("theregister.co.uk"))
         assertEquals("bair.berkeley", NewsFormatter.siteName("bair.berkeley.edu"))
+        assertEquals("macrumors.com", NewsFormatter.domainName("https://www.macrumors.com/2026/10/28/top-stories/"))
+        assertEquals("theregister.co.uk", NewsFormatter.domainName("https://www.theregister.co.uk/article"))
 
         val longText = "word ".repeat(120)
         val truncated = NewsFormatter.truncateSummary(longText, length = 480)
@@ -232,8 +269,26 @@ class HotnewsTest {
         controller.loadFeed(reset = true)
         assertEquals("macrumors", controller.uiState.value.selectedSite)
         assertTrue(controller.uiState.value.isSiteSelected)
+        assertFalse(controller.uiState.value.isAboutOpen)
         assertEquals("/api/macrumors", controller.uiState.value.activeFeedPath)
         assertEquals("site-macrumors-1", controller.uiState.value.entries.first().id)
+
+        // 6b. Open About page while site filter feed is open -> fetches /api/new across all pages
+        controller.openAboutPage()
+        controller.loadPublications()
+        assertTrue(controller.uiState.value.isAboutOpen)
+        assertEquals("macrumors", controller.uiState.value.selectedSite)
+        assertTrue(controller.uiState.value.canNavigateBack)
+        assertEquals(20, controller.uiState.value.publications.size)
+        assertEquals(
+            (1..20).map { "site$it" }.sorted(),
+            controller.uiState.value.publications
+        )
+
+        // Pressing OS back (or tapping StickyNote2 icon) from About returns to the site filter feed
+        controller.navigateBack()
+        assertFalse(controller.uiState.value.isAboutOpen)
+        assertEquals("macrumors", controller.uiState.value.selectedSite)
 
         // 7. Closing the site/domain filter goes back to Hottest section
         controller.clearSiteFilter()
@@ -242,6 +297,47 @@ class HotnewsTest {
         assertFalse(controller.uiState.value.isSiteSelected)
         assertEquals(FeedTab.HOT, controller.uiState.value.selectedTab)
         assertEquals("/api/hot", controller.uiState.value.activeFeedPath)
+        assertEquals("hottest-all-1", controller.uiState.value.entries.first().id)
+
+        // 8. Opening an article opens in-app web page with site domain and URL for sharing
+        val firstEntry = controller.uiState.value.entries.first()
+        controller.openArticle(firstEntry)
+        assertTrue(controller.uiState.value.isWebPageOpen)
+        assertEquals("https://site1.com/article-1", controller.uiState.value.activeWebUrl)
+        assertEquals("site1.com", controller.uiState.value.resolvedWebDomain)
+        assertEquals("site1", controller.uiState.value.resolvedWebSite)
+        assertTrue(controller.isArticleVisited(firstEntry.url))
+
+        // Navigating within WebView updates active URL and domain
+        controller.updateActiveWebUrl("https://www.macrumors.com/2026/11/14/new-post/")
+        assertEquals("https://www.macrumors.com/2026/11/14/new-post/", controller.uiState.value.activeWebUrl)
+        assertEquals("macrumors.com", controller.uiState.value.resolvedWebDomain)
+        assertEquals("macrumors", controller.uiState.value.resolvedWebSite)
+
+        // Tapping domain in web page nav bar closes web page, saves it in history, and filters feed by that site
+        controller.selectSiteFromWebPage()
+        controller.loadFeed(reset = true)
+        assertFalse(controller.uiState.value.isWebPageOpen)
+        assertNull(controller.uiState.value.activeWebUrl)
+        assertEquals("https://www.macrumors.com/2026/11/14/new-post/", controller.uiState.value.retainedWebUrl)
+        assertEquals("macrumors", controller.uiState.value.selectedSite)
+        assertEquals("site-macrumors-1", controller.uiState.value.entries.first().id)
+
+        // Pressing OS back from the site feed restores the web page from history instead of going to front page
+        controller.navigateBack()
+        assertTrue(controller.uiState.value.isWebPageOpen)
+        assertEquals("https://www.macrumors.com/2026/11/14/new-post/", controller.uiState.value.activeWebUrl)
+        assertEquals("macrumors.com", controller.uiState.value.resolvedWebDomain)
+        assertNull(controller.uiState.value.selectedSite)
+        assertEquals(FeedTab.HOT, controller.uiState.value.selectedTab)
+        assertEquals("hottest-all-1", controller.uiState.value.entries.first().id)
+
+        // Pressing OS back again from the web page closes it and returns to the front page
+        controller.navigateBack()
+        assertFalse(controller.uiState.value.isWebPageOpen)
+        assertNull(controller.uiState.value.retainedWebUrl)
+        assertNull(controller.uiState.value.selectedSite)
+        assertEquals(FeedTab.HOT, controller.uiState.value.selectedTab)
         assertEquals("hottest-all-1", controller.uiState.value.entries.first().id)
     }
 
