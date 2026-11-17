@@ -26,6 +26,7 @@ import com.lucianmarin.news.ui.navigation.activeIcon
 import com.lucianmarin.news.ui.screens.AboutContent
 import com.lucianmarin.news.ui.screens.isOddNewsRow
 import com.lucianmarin.news.ui.screens.shouldShowBottomDivider
+import com.lucianmarin.news.ui.screens.shouldShowFeedAboutLink
 import com.lucianmarin.news.ui.screens.shouldShowTopDivider
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -150,6 +151,14 @@ class HotnewsTest {
     }
 
     @Test
+    fun `centered About link is shown only at the end of a non-empty feed`() {
+        assertFalse(shouldShowFeedAboutLink(entryCount = 0, isLoadingMore = false, canLoadMore = false))
+        assertFalse(shouldShowFeedAboutLink(entryCount = 10, isLoadingMore = true, canLoadMore = true))
+        assertFalse(shouldShowFeedAboutLink(entryCount = 10, isLoadingMore = false, canLoadMore = true))
+        assertTrue(shouldShowFeedAboutLink(entryCount = 10, isLoadingMore = false, canLoadMore = false))
+    }
+
+    @Test
     fun `NewsFormatter mirrors shortdate, sitename, 480-char summary truncation, and site multiply label`() {
         val now = 1_700_000_000.0
         assertEquals("15m", NewsFormatter.shortDate(timestamp = now - 15 * 60, now = now))
@@ -264,6 +273,15 @@ class HotnewsTest {
         assertEquals(FeedTab.NEW, controller.uiState.value.selectedTab)
         assertEquals("newest-all-1", controller.uiState.value.entries.first().id)
 
+        // 5b. Open About page from Newest feed and close back to Newest
+        controller.openAboutPage()
+        assertTrue(controller.uiState.value.isAboutOpen)
+        assertNull(controller.uiState.value.selectedSite)
+        assertEquals(FeedTab.NEW, controller.uiState.value.selectedTab)
+        controller.closeAboutPage()
+        assertFalse(controller.uiState.value.isAboutOpen)
+        assertEquals(FeedTab.NEW, controller.uiState.value.selectedTab)
+
         // 6. Select a site/domain while in Newest -> shows site feed
         controller.selectSite("macrumors")
         controller.loadFeed(reset = true)
@@ -285,7 +303,7 @@ class HotnewsTest {
             controller.uiState.value.publications
         )
 
-        // Pressing OS back (or tapping StickyNote2 icon) from About returns to the site filter feed
+        // Pressing OS back (or tapping close icon) from About returns to the site filter feed
         controller.navigateBack()
         assertFalse(controller.uiState.value.isAboutOpen)
         assertEquals("macrumors", controller.uiState.value.selectedSite)

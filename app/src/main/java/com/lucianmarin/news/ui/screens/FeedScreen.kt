@@ -44,6 +44,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -273,6 +274,19 @@ fun FeedScreen(
                             )
                         }
                     }
+                } else if (shouldShowFeedAboutLink(
+                        entryCount = uiState.entries.size,
+                        isLoadingMore = uiState.isLoadingMore,
+                        canLoadMore = uiState.canLoadMore
+                    )
+                ) {
+                    item(key = "about_link") {
+                        val lastRowBg = NewsTheme.lastRowBackground(entryCount = uiState.entries.size)
+                        FeedAboutButton(
+                            backgroundColor = lastRowBg,
+                            onClick = { viewModel.openAboutPage() }
+                        )
+                    }
                 }
             }
 
@@ -289,6 +303,40 @@ fun FeedScreen(
         }
     }
 }
+
+@Composable
+private fun FeedAboutButton(
+    backgroundColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(backgroundColor)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = NewsTheme.horizontalPadding, vertical = NewsTheme.rowVerticalPadding),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "About",
+            fontFamily = Route159FontFamily,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            color = NewsTheme.gray
+        )
+    }
+}
+
+internal fun shouldShowFeedAboutLink(
+    entryCount: Int,
+    isLoadingMore: Boolean,
+    canLoadMore: Boolean
+): Boolean = entryCount > 0 && !isLoadingMore && !canLoadMore
 
 @Composable
 private fun FeedStatusRow(

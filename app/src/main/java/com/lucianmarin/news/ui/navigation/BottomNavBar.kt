@@ -90,7 +90,7 @@ val CloseSiteNavIcon: ImageVector
 private sealed interface NavBarMode {
     data object Tabs : NavBarMode
     data class SiteFilter(val site: String) : NavBarMode
-    data class About(val site: String?) : NavBarMode
+    data object About : NavBarMode
     data class WebPage(val url: String, val domain: String) : NavBarMode
 }
 
@@ -114,7 +114,7 @@ fun BottomNavBar(
             val domain = uiState.resolvedWebDomain ?: NewsFormatter.domainName(activeWebUrl)
             NavBarMode.WebPage(url = activeWebUrl, domain = domain)
         }
-        uiState.isAboutOpen -> NavBarMode.About(site = activeSite)
+        uiState.isAboutOpen -> NavBarMode.About
         activeSite != null -> NavBarMode.SiteFilter(site = activeSite)
         else -> NavBarMode.Tabs
     }
@@ -138,7 +138,7 @@ fun BottomNavBar(
             when (mode) {
                 is NavBarMode.Tabs -> "tabs"
                 is NavBarMode.SiteFilter -> "site:${mode.site}"
-                is NavBarMode.About -> "about:${mode.site.orEmpty()}"
+                is NavBarMode.About -> "about"
                 is NavBarMode.WebPage -> "web:${mode.domain}"
             }
         },
@@ -176,7 +176,8 @@ fun BottomNavBar(
                     )
                 }
                 is NavBarMode.About -> {
-                    val siteLabel = mode.site?.let { NewsFormatter.siteNavigationLabel(it) }
+                    val closeTarget = activeSite?.let { NewsFormatter.siteNavigationLabel(it) }
+                        ?: uiState.selectedTab.title
                     BottomNavTextButton(
                         title = "About",
                         contentDesc = "About",
@@ -185,23 +186,13 @@ fun BottomNavBar(
                         onClick = onOpenAbout
                     )
                     BottomNavIconButton(
-                        icon = ActiveSiteNavIcon,
-                        contentDesc = if (siteLabel != null) "Return to $siteLabel" else "Return to site feed",
-                        onClick = onCloseAbout
-                    )
-                    BottomNavIconButton(
                         icon = CloseSiteNavIcon,
-                        contentDesc = "Close About and return to Hottest",
-                        onClick = onClearSite
+                        contentDesc = "Close About and return to $closeTarget",
+                        onClick = onCloseAbout
                     )
                 }
                 is NavBarMode.SiteFilter -> {
                     val siteLabel = NewsFormatter.siteNavigationLabel(mode.site)
-                    BottomNavIconButton(
-                        icon = AboutNavIcon,
-                        contentDesc = "About",
-                        onClick = onOpenAbout
-                    )
                     BottomNavTextButton(
                         title = siteLabel,
                         contentDesc = siteLabel,
