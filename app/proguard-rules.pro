@@ -16,3 +16,9 @@
 -keepclasseswithmembers class com.lucianmarin.news.model.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
+
+# Prevent R8 from inlining AndroidViewModel.<init> into subclasses,
+# which emits an illegal invoke-direct to grandparent ViewModel.<init>()
+-keep class androidx.lifecycle.AndroidViewModel {
+    public <init>(android.app.Application);
+}
